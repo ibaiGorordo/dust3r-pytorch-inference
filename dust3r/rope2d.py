@@ -1,3 +1,6 @@
+# Copyright (C) 2022-present Naver Corporation. All rights reserved.
+# Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
+
 import torch
 
 
@@ -43,7 +46,8 @@ class RoPE2D(torch.nn.Module):
         tokens = torch.cat((y, x), dim=-1)
         return tokens
 
-if __name__ == '__main__':
+
+def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     width = 512
@@ -65,3 +69,6 @@ if __name__ == '__main__':
         output_names=["rotated_tokens"],
         opset_version=13,  # or whichever opset you need
     )
+
+if __name__ == '__main__':
+    main()
