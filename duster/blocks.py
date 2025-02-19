@@ -85,6 +85,7 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
+        print(x.shape)
 
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1, 3)
         q, k, v = [qkv[:, :, i] for i in range(3)]
@@ -117,8 +118,8 @@ class Block(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x, xpos):
-        x = x + self.drop_path(self.attn(self.norm1(x), xpos))
+    def forward(self, x):
+        x = x + self.drop_path(self.attn(self.norm1(x)))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 

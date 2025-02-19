@@ -19,9 +19,10 @@ def get_cos_sin(base, D, seq_len, device, dtype):
 
 class RoPE2D(torch.nn.Module):
 
-    def __init__(self, width=512, height=288, patch_size=16, base=100.0, D=32, device=torch.device('cpu'), dtype=torch.float32):
+    def __init__(self, batch=2, width=512, height=288, patch_size=16, base=100.0, D=32, device=torch.device('cpu'), dtype=torch.float32):
         super().__init__()
-        pos = get_positions(1, height // patch_size, width // patch_size, device)
+
+        pos = get_positions(batch, height // patch_size, width // patch_size, device)
         pos_x, pos_y = pos[:, :, 1], pos[:, :, 0]
         cos, sin = get_cos_sin(base, D, int(pos.max()) + 1, device, dtype)
 
@@ -36,6 +37,7 @@ class RoPE2D(torch.nn.Module):
         return torch.cat((-x2, x1), dim=-1)
 
     def apply_rope1d(self, tokens, cos, sin):
+        print(tokens.shape, cos.shape, sin.shape)
         return (tokens * cos) + (self.rotate_half(tokens) * sin)
 
     def forward(self, tokens):
@@ -53,22 +55,23 @@ def main():
     width = 512
     height = 288
     patch_size = 16
-    batch_size, seq_len, n_heads, dim = 1, 12, 576, 64
+    batch_size, seq_len, n_heads, dim = 1, 16, 576, 64
     D = dim // 2
     base = 100.0
 
     model = RoPE2D(width=width, height=height, patch_size=patch_size, base=base, D=D, device=device)
 
     tokens = torch.randn(batch_size, seq_len, n_heads, dim, dtype=torch.float32, device=device)
+    model(tokens)
 
-    torch.onnx.export(
-        model,
-        (tokens,),
-        "models/rope2d.onnx",
-        input_names=["tokens"],
-        output_names=["rotated_tokens"],
-        opset_version=13,  # or whichever opset you need
-    )
+    # torch.onnx.export(
+    #     model,
+    #     (tokens,),
+    #     "models/rope2d.onnx",
+    #     input_names=["tokens"],
+    #     output_names=["rotated_tokens"],
+    #     opset_version=13,  # or whichever opset you need
+    # )
 
 if __name__ == '__main__':
     main()
