@@ -37,7 +37,6 @@ class RoPE2D(torch.nn.Module):
         return torch.cat((-x2, x1), dim=-1)
 
     def apply_rope1d(self, tokens, cos, sin):
-        print(tokens.shape, cos.shape, sin.shape)
         return (tokens * cos) + (self.rotate_half(tokens) * sin)
 
     def forward(self, tokens):

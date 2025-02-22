@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.xpu import device
 
 torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 from functools import partial
@@ -17,7 +16,7 @@ class ImageEncoder(nn.Module):
                  patch_size=16,
                  enc_embed_dim=1024,
                  enc_num_heads=16,
-                 enc_depth=12,
+                 enc_depth=24,
                  mlp_ratio=4,
                  norm_layer=partial(nn.LayerNorm, eps=1e-6),
                  device=torch.device('cuda'),
@@ -39,7 +38,6 @@ class ImageEncoder(nn.Module):
 
         return self.enc_norm(x)
 
-
 if __name__ == '__main__':
 
     import pickle
@@ -51,7 +49,7 @@ if __name__ == '__main__':
 
     enc_state_dict = {
         k: v for k, v in ckpt['model'].items()
-        if k.startswith("patch_embed") or k.startswith("enc_blocks")
+        if k.startswith("patch_embed") or k.startswith("enc_blocks") or k.startswith("enc_norm")
     }
 
     model.load_state_dict(enc_state_dict, strict=False)
@@ -60,4 +58,6 @@ if __name__ == '__main__':
     # load the "img1_img2.pkl" file
     with open("../img1_img2.pkl", "rb") as f:
         input, output = pickle.load(f)
-    print(model(input)-output)
+    with torch.inference_mode():
+
+        print(model(input)-output)

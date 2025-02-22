@@ -85,7 +85,6 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
-        print(x.shape)
 
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1, 3)
         q, k, v = [qkv[:, :, i] for i in range(3)]
