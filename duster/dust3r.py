@@ -49,17 +49,24 @@ class Dust3rEncoder(nn.Module):
         }
         self.load_state_dict(enc_state_dict, strict=False)
 
+# class Dust3rDecoder(nn.Module):
+
+
 if __name__ == '__main__':
 
     import pickle
     model_path = "../models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
     ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
 
-    model = Dust3rEncoder(ckpt, width=512, height=288, device=torch.device('cuda'))
+    encoder = Dust3rEncoder(ckpt, width=512, height=288, device=torch.device('cuda'))
 
     # load the "img1_img2.pkl" file
     with open("../img1_img2.pkl", "rb") as f:
-        input, output = pickle.load(f)
+        img1, img2, dec1, dec2, feat1, feat2, pos1, pos2 = pickle.load(f)
 
     with torch.inference_mode():
-        print(model(input)-output)
+        feat = encoder(torch.cat((img1, img2)))
+        out1, out2 = feat.chunk(2, dim=0)
+        print(out1- feat1)
+        print(out2- feat2)
+
