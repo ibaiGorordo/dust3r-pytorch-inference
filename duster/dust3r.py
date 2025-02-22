@@ -8,7 +8,7 @@ from duster.blocks import Block, DecoderBlock, PatchEmbed
 from duster.rope2d import RoPE2D
 
 
-class ImageEncoder(nn.Module):
+class Dust3rEncoder(nn.Module):
     def __init__(self,
                  ckpt,
                  batch=2,
@@ -55,11 +55,11 @@ if __name__ == '__main__':
     model_path = "../models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
     ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
 
-    model = ImageEncoder(ckpt, width=512, height=288, device=torch.device('cuda'))
+    model = Dust3rEncoder(ckpt, width=512, height=288, device=torch.device('cuda'))
 
     # load the "img1_img2.pkl" file
     with open("../img1_img2.pkl", "rb") as f:
         input, output = pickle.load(f)
-        
+
     with torch.inference_mode():
         print(model(input)-output)
