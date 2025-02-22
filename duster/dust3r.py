@@ -10,6 +10,7 @@ from duster.rope2d import RoPE2D
 
 class ImageEncoder(nn.Module):
     def __init__(self,
+                 ckpt,
                  batch=2,
                  width=512,
                  height=512,
@@ -29,6 +30,9 @@ class ImageEncoder(nn.Module):
             for i in range(enc_depth)])
         self.enc_norm = norm_layer(enc_embed_dim)
 
+        self.load_checkpoint(ckpt)
+        self.to(device)
+
     def forward(self, x):
         x = self.patch_embed(x)
 
@@ -38,26 +42,24 @@ class ImageEncoder(nn.Module):
 
         return self.enc_norm(x)
 
+    def load_checkpoint(self, ckpt):
+        enc_state_dict = {
+            k: v for k, v in ckpt['model'].items()
+            if k.startswith("patch_embed") or k.startswith("enc_blocks") or k.startswith("enc_norm")
+        }
+        self.load_state_dict(enc_state_dict, strict=False)
+
 if __name__ == '__main__':
 
     import pickle
-    model = ImageEncoder(width=512, height=288, device='cuda')
-
-
     model_path = "../models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
     ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
 
-    enc_state_dict = {
-        k: v for k, v in ckpt['model'].items()
-        if k.startswith("patch_embed") or k.startswith("enc_blocks") or k.startswith("enc_norm")
-    }
-
-    model.load_state_dict(enc_state_dict, strict=False)
-    model.to('cuda')
+    model = ImageEncoder(ckpt, width=512, height=288, device=torch.device('cuda'))
 
     # load the "img1_img2.pkl" file
     with open("../img1_img2.pkl", "rb") as f:
         input, output = pickle.load(f)
+        
     with torch.inference_mode():
-
         print(model(input)-output)
