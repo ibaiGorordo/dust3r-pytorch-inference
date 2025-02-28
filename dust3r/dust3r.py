@@ -6,8 +6,8 @@ import torch.nn as nn
 torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 from functools import partial
 
-from duster.blocks import Block, DecoderBlock, PatchEmbed
-from duster.rope2d import RoPE2D
+from blocks import Block, DecoderBlock, PatchEmbed
+from rope2d import RoPE2D
 
 
 class Dust3rEncoder(nn.Module):
@@ -35,6 +35,7 @@ class Dust3rEncoder(nn.Module):
         self.load_checkpoint(ckpt)
         self.to(device)
 
+    @torch.inference_mode()
     def forward(self, x):
         x = self.patch_embed(x)
 
@@ -88,6 +89,7 @@ class Dust3rDecoder(nn.Module):
         self.load_checkpoint(ckpt)
         self.to(device)
 
+    @torch.inference_mode()
     def forward(self, f1, f2):
         # project to decoder dim
         f1_prev = self.decoder_embed(f1)
@@ -129,11 +131,29 @@ if __name__ == '__main__':
         img1, img2, dec1, dec2, feat1, feat2, pos1, pos2 = pickle.load(f)
 
 
-    with torch.inference_mode():
-        feat = encoder(torch.cat((img1, img2)))
-        f1, f2 = feat.chunk(2, dim=0)
-        d1, d2 = decoder(f1, f2)
-        print(f1 - feat1)
-        print(f2 - feat2)
-        print(d1 - dec1[-1])
-        print(d2 - dec2[-1])
+    feat = encoder(torch.cat((img1, img2)))
+    f1, f2 = feat.chunk(2, dim=0)
+    d1, d2 = decoder(f1, f2)
+    print(f1 - feat1)
+    print(f2 - feat2)
+    print(d1 - dec1[-1])
+    print(d2 - dec2[-1])
+
+
+    # torch.onnx.export(
+    #     encoder,
+    #     (torch.cat((img1, img2)),),
+    #     "encoder.onnx",
+    #     input_names=["img"],
+    #     output_names=["feats"],
+    #     opset_version=13,  # or whichever opset you need
+    # )
+    #
+    # torch.onnx.export(
+    #     decoder,
+    #     (f1, f2),
+    #     "decoder.onnx",
+    #     input_names=["f1", "f2"],
+    #     output_names=["d1", "d2"],
+    #     opset_version=13,  # or whichever opset you need
+    # )
