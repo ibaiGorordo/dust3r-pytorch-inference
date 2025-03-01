@@ -6,9 +6,9 @@ import torch.nn as nn
 torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
 from functools import partial
 
-from blocks import Block, DecoderBlock, PatchEmbed
-from rope2d import RoPE2D
-from heads import DPTHead, LinearPts3d
+from .blocks import Block, DecoderBlock, PatchEmbed
+from .rope2d import RoPE2D
+from .heads import DPTHead, LinearPts3d
 
 
 class Dust3rEncoder(nn.Module):
