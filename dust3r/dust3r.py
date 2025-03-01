@@ -143,9 +143,8 @@ class Dust3rHead(nn.Module):
 
     @torch.inference_mode()
     def forward(self, d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12):
-        with torch.amp.autocast('cuda', enabled=False):
-            pts3d1, conf1 = self.downstream_head1(d1_0.float(), d1_6.float(), d1_9.float(), d1_12.float())
-            pts3d2, conf2 = self.downstream_head2(d2_0.float(), d2_6.float(), d2_9.float(), d2_12.float())
+        pts3d1, conf1 = self.downstream_head1(d1_0, d1_6, d1_9, d1_12)
+        pts3d2, conf2 = self.downstream_head2(d2_0, d2_6, d2_9, d2_12)
 
         return pts3d1, conf1, pts3d2, conf2
 
@@ -212,6 +211,15 @@ if __name__ == '__main__':
     #     (f1, f2),
     #     "decoder.onnx",
     #     input_names=["f1", "f2"],
-    #     output_names=["d1", "d2"],
+    #     output_names=["d1_0", "d1_6", "d1_9", "d1_12", "d2_0", "d2_6", "d2_9", "d2_12"],
+    #     opset_version=13,  # or whichever opset you need
+    # )
+    #
+    # torch.onnx.export(
+    #     head,
+    #     (d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12),
+    #     "head.onnx",
+    #     input_names=["d1_0", "d1_6", "d1_9", "d1_12", "d2_0", "d2_6", "d2_9", "d2_12"],
+    #     output_names=["pts3d1", "conf1", "pts3d2", "conf2"],
     #     opset_version=13,  # or whichever opset you need
     # )

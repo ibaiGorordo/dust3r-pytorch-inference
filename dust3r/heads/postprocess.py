@@ -26,7 +26,7 @@ def reg_dense_depth(xyz):
     d = xyz.norm(dim=-1, keepdim=True)
     xyz = xyz / d.clip(min=1e-8)
 
-    return xyz * torch.expm1(d)
+    return xyz * (torch.exp(d) - 1)
 
 def reg_dense_conf(x, vmin=1, vmax=torch.inf):
     """
