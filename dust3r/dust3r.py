@@ -8,6 +8,7 @@ from functools import partial
 
 from blocks import Block, DecoderBlock, PatchEmbed
 from rope2d import RoPE2D
+from heads import DPTHead, LinearPts3d
 
 
 class Dust3rEncoder(nn.Module):
@@ -32,7 +33,7 @@ class Dust3rEncoder(nn.Module):
             for i in range(enc_depth)])
         self.enc_norm = norm_layer(enc_embed_dim)
 
-        self.load_checkpoint(ckpt)
+        self._load_checkpoint(ckpt)
         self.to(device)
 
     @torch.inference_mode()
@@ -45,12 +46,12 @@ class Dust3rEncoder(nn.Module):
 
         return self.enc_norm(x)
 
-    def load_checkpoint(self, ckpt):
+    def _load_checkpoint(self, ckpt):
         enc_state_dict = {
             k: v for k, v in ckpt['model'].items()
             if k.startswith("patch_embed") or k.startswith("enc_blocks") or k.startswith("enc_norm")
         }
-        self.load_state_dict(enc_state_dict, strict=False)
+        self.load_state_dict(enc_state_dict, strict=True)
 
 class Dust3rDecoder(nn.Module):
     def __init__(self,
@@ -86,36 +87,79 @@ class Dust3rDecoder(nn.Module):
         # final norm layer
         self.dec_norm = norm_layer(dec_embed_dim)
 
-        self.load_checkpoint(ckpt)
+        self._load_checkpoint(ckpt)
         self.to(device)
 
     @torch.inference_mode()
     def forward(self, f1, f2):
-        # project to decoder dim
-        f1_prev = self.decoder_embed(f1)
-        f2_prev = self.decoder_embed(f2)
-        for blk1, blk2 in zip(self.dec_blocks, self.dec_blocks2):
+        f1_0 = f1_6 = f1_9 = f1
+        f2_0 = f2_6 = f2_9 = f2
+
+        # Project to decoder dimension
+        f1_prev, f2_prev = self.decoder_embed(f1), self.decoder_embed(f2)
+
+
+        for i, (blk1, blk2) in enumerate(zip(self.dec_blocks, self.dec_blocks2), start=1):
             # img1 side
             f1, _ = blk1(f1_prev, f2_prev)
 
             # img2 side
             f2, _ = blk2(f2_prev, f1_prev)
 
-            # store the result
-            f1_prev = f1
-            f2_prev = f2
+            # Store the result
+            f1_prev, f2_prev = f1, f2
 
-        f1 = self.dec_norm(f1)
-        f2 = self.dec_norm(f2)
+            if i == 6:
+                f1_6, f2_6 = f1, f2
+            elif i == 9:
+                f1_9, f2_9 = f1, f2
 
-        return f1, f2
+        f1_12, f2_12 = self.dec_norm(f1), self.dec_norm(f2)
 
-    def load_checkpoint(self, ckpt):
+        return f1_0, f1_6, f1_9, f1_12, f2_0, f2_6, f2_9, f2_12
+
+    def _load_checkpoint(self, ckpt):
         dec_state_dict = {
             k: v for k, v in ckpt['model'].items()
             if k.startswith("decoder_embed") or k.startswith("dec_blocks") or k.startswith("dec_norm")
         }
-        self.load_state_dict(dec_state_dict, strict=False)
+        self.load_state_dict(dec_state_dict, strict=True)
+
+class Dust3rHead(nn.Module):
+    def __init__(self,
+                 ckpt,
+                 width=512,
+                 height=512,
+                 device=torch.device('cuda'),
+                 ):
+        super().__init__()
+
+        self.downstream_head1 = DPTHead(width, height) if self._is_dpt(ckpt) else LinearPts3d(width, height)
+        self.downstream_head2 = DPTHead(width, height) if self._is_dpt(ckpt) else LinearPts3d(width, height)
+
+        self._load_checkpoint(ckpt)
+        self.to(device)
+
+
+    @torch.inference_mode()
+    def forward(self, d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12):
+        with torch.amp.autocast('cuda', enabled=False):
+            pts3d1, conf1 = self.downstream_head1(d1_0.float(), d1_6.float(), d1_9.float(), d1_12.float())
+            pts3d2, conf2 = self.downstream_head2(d2_0.float(), d2_6.float(), d2_9.float(), d2_12.float())
+
+        return pts3d1, conf1, pts3d2, conf2
+
+    def _load_checkpoint(self, ckpt):
+        head_state_dict = {
+            k.replace(".dpt", ""): v
+            for k, v in ckpt['model'].items()
+            if "head" in k
+        }
+        self.load_state_dict(head_state_dict, strict=True)
+
+    def _is_dpt(self, ckpt):
+        return any("dpt" in k for k in ckpt['model'].keys())
+
 
 if __name__ == '__main__':
 
@@ -123,21 +167,35 @@ if __name__ == '__main__':
     model_path = "../models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
     ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
 
+
     encoder = Dust3rEncoder(ckpt, width=512, height=288, device=torch.device('cuda'))
     decoder = Dust3rDecoder(ckpt, width=512, height=288, device=torch.device('cuda'))
+    head = Dust3rHead(ckpt, width=512, height=288, device=torch.device('cuda'))
+
 
     # load the "img1_img2.pkl" file
     with open("../img1_img2.pkl", "rb") as f:
-        img1, img2, dec1, dec2, feat1, feat2, pos1, pos2 = pickle.load(f)
+        img1, img2, dec1, dec2, feat1, feat2, pos1, pos2, pts3d1, pts3d2, conf1, conf2 = pickle.load(f)
 
 
     feat = encoder(torch.cat((img1, img2)))
     f1, f2 = feat.chunk(2, dim=0)
-    d1, d2 = decoder(f1, f2)
+    d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12 = decoder(f1, f2)
+    pt1, cf1, pt2, cf2 = head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
     print(f1 - feat1)
     print(f2 - feat2)
-    print(d1 - dec1[-1])
-    print(d2 - dec2[-1])
+    print(d1_0 - dec1[0])
+    print(d2_0 - dec2[0])
+    print(d1_6 - dec1[6])
+    print(d2_6 - dec2[6])
+    print(d1_9 - dec1[9])
+    print(d2_9 - dec2[9])
+    print(d1_12 - dec1[12])
+    print(d2_12 - dec2[12])
+    print(pts3d1 - pt1)
+    print(pts3d2 - pt2)
+    print(conf1 - cf1)
+    print(conf2 - cf2)
 
 
     # torch.onnx.export(

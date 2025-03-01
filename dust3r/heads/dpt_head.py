@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from typing import Union, Tuple, Iterable, List, Optional
 
-from dust3r.heads.postprocess import postprocess
+from .postprocess import postprocess
 
 
 def pair(t):
@@ -287,10 +287,11 @@ class DPTHead(nn.Module):
     """
 
     def __init__(self,
+                 width=512,
+                 height=512,
                  num_channels: int = 4,
                  stride_level: int = 1,
                  patch_size: Union[int, Tuple[int, int]] = 16,
-                 hooks: Tuple[int] = (0, 6, 9, 12),
                  layer_dims: Tuple[int] = (96, 192, 384, 768),
                  feature_dim: int = 256,
                  last_dim: int = 128,
@@ -302,7 +303,6 @@ class DPTHead(nn.Module):
         self.num_channels = num_channels
         self.stride_level = stride_level
         self.patch_size = pair(patch_size)
-        self.hooks = hooks
         self.layer_dims = layer_dims
         self.feature_dim = feature_dim
         self.dim_tokens_enc = dim_tokens_enc
@@ -310,6 +310,8 @@ class DPTHead(nn.Module):
         # Actual patch height and width, taking into account stride of input
         self.P_H = max(1, self.patch_size[0] // stride_level)
         self.P_W = max(1, self.patch_size[1] // stride_level)
+        self.num_w = width // (self.stride_level * self.P_W)  # Number of patches in width
+        self.num_h = height // (self.stride_level * self.P_H) # Number of patches in height
 
         self.scratch = make_scratch(layer_dims, feature_dim, groups=1, expand=False)
 
@@ -327,18 +329,15 @@ class DPTHead(nn.Module):
             nn.Conv2d(last_dim, self.num_channels, kernel_size=1, stride=1, padding=0)
         )
 
-        self.act_postprocess = self.init_act_postprocess(dim_tokens_enc=dim_tokens_enc)
+        self.act_postprocess = self.init_act_postprocess()
 
-    def init_act_postprocess(self, dim_tokens_enc: Tuple[int]):
+    def init_act_postprocess(self):
         """
         Initialize parts of decoder that are dependent on dimension of encoder tokens.
         Should be called when setting up MultiMAE.
 
-        :param dim_tokens_enc: Dimension of tokens coming from encoder
-        """
-        # print(dim_tokens_enc)
-
         # Set up activation postprocessing layers
+        """
 
         act_postprocess = nn.ModuleList()
         act_postprocess.append(
@@ -400,32 +399,17 @@ class DPTHead(nn.Module):
 
         return act_postprocess
 
-    def adapt_tokens(self, encoder_tokens):
-        # Adapt tokens
-        x = []
-        x.append(encoder_tokens[:, :])
-        x = torch.cat(x, dim=-1)
-        return x
-
-    def forward(self, encoder_tokens: List[torch.Tensor]):
-        assert self.dim_tokens_enc is not None, 'Need to call init(dim_tokens_enc) function first'
-        # H, W = input_info['image_size']
-        image_size = self.image_size
-        H, W = image_size
-        # Number of patches in height and width
-        N_H = H // (self.stride_level * self.P_H)
-        N_W = W // (self.stride_level * self.P_W)
+    def forward(self, tokens_0, tokens_6, tokens_9, tokens_12):
 
         # Hook decoder onto 4 layers from specified ViT layers
-        layers = [encoder_tokens[hook] for hook in self.hooks]
-
-        # Extract only task-relevant tokens and ignore global tokens.
-        layers = [self.adapt_tokens(l) for l in layers]
+        layers = [tokens_0, tokens_6, tokens_9, tokens_12]
 
         # Reshape tokens to spatial representation
-        layers = [rearrange(l, 'b (nh nw) c -> b c nh nw', nh=N_H, nw=N_W) for l in layers]
+        layers = [rearrange(l, 'b (nh nw) c -> b c nh nw', nh=self.num_h, nw=self.num_w) for l in layers]
 
         layers = [self.act_postprocess[idx](l) for idx, l in enumerate(layers)]
+        # print(layers)
+
         # Project layers to chosen feature dim
         layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]
 
