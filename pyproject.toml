@@ -9,5 +9,7 @@ dependencies = [
     "torchvision @ https://download.pytorch.org/whl/cu121/torchvision-0.20.1%2Bcu121-cp311-cp311-win_amd64.whl",
     "onnx",
     "einops",
+    "Pillow",
+    "rerun-sdk",
     "opencv-python",
 ]
