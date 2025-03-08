@@ -8,16 +8,16 @@ from dust3r import Dust3rEncoder, Dust3rDecoder, Dust3rHead
 def test_dust3r(model_path, test_data_path):
     print(f"Testing {model_path} with {test_data_path}")
 
-    ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
+    ckpt_dict = torch.load(model_path, map_location='cpu', weights_only=False)
 
     filename = os.path.basename(test_data_path)
     width, height = 512, 288
     if "224" in filename:
         width = height = 224
 
-    encoder = Dust3rEncoder(ckpt, width=width, height=height, device=torch.device('cuda'))
-    decoder = Dust3rDecoder(ckpt, width=width, height=height, device=torch.device('cuda'))
-    head = Dust3rHead(ckpt, width=width, height=height, device=torch.device('cuda'))
+    encoder = Dust3rEncoder(ckpt_dict, width=width, height=height, device=torch.device('cuda'))
+    decoder = Dust3rDecoder(ckpt_dict, width=width, height=height, device=torch.device('cuda'))
+    head = Dust3rHead(ckpt_dict, width=width, height=height, device=torch.device('cuda'))
 
 
     # load the "img1_img2.pkl" file

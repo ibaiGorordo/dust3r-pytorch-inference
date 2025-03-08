@@ -9,11 +9,12 @@ from functools import partial
 from .blocks import Block, DecoderBlock, PatchEmbed
 from .rope2d import RoPE2D
 from .heads import DPTHead, LinearPts3d
+from .preprocess import preprocess
 
 
 class Dust3rEncoder(nn.Module):
     def __init__(self,
-                 ckpt,
+                 ckpt_dict,
                  batch=2,
                  width=512,
                  height=512,
@@ -33,7 +34,7 @@ class Dust3rEncoder(nn.Module):
             for i in range(enc_depth)])
         self.enc_norm = norm_layer(enc_embed_dim)
 
-        self._load_checkpoint(ckpt)
+        self._load_checkpoint(ckpt_dict)
         self.to(device)
 
     @torch.inference_mode()
@@ -46,16 +47,16 @@ class Dust3rEncoder(nn.Module):
 
         return self.enc_norm(x)
 
-    def _load_checkpoint(self, ckpt):
+    def _load_checkpoint(self, ckpt_dict):
         enc_state_dict = {
-            k: v for k, v in ckpt['model'].items()
+            k: v for k, v in ckpt_dict['model'].items()
             if k.startswith("patch_embed") or k.startswith("enc_blocks") or k.startswith("enc_norm")
         }
         self.load_state_dict(enc_state_dict, strict=True)
 
 class Dust3rDecoder(nn.Module):
     def __init__(self,
-                 ckpt,
+                 ckpt_dict,
                  batch=1,
                  width=512,
                  height=512,
@@ -87,7 +88,7 @@ class Dust3rDecoder(nn.Module):
         # final norm layer
         self.dec_norm = norm_layer(dec_embed_dim)
 
-        self._load_checkpoint(ckpt)
+        self._load_checkpoint(ckpt_dict)
         self.to(device)
 
     @torch.inference_mode()
@@ -118,26 +119,26 @@ class Dust3rDecoder(nn.Module):
 
         return f1_0, f1_6, f1_9, f1_12, f2_0, f2_6, f2_9, f2_12
 
-    def _load_checkpoint(self, ckpt):
+    def _load_checkpoint(self, ckpt_dict):
         dec_state_dict = {
-            k: v for k, v in ckpt['model'].items()
+            k: v for k, v in ckpt_dict['model'].items()
             if k.startswith("decoder_embed") or k.startswith("dec_blocks") or k.startswith("dec_norm")
         }
         self.load_state_dict(dec_state_dict, strict=True)
 
 class Dust3rHead(nn.Module):
     def __init__(self,
-                 ckpt,
+                 ckpt_dict,
                  width=512,
                  height=512,
                  device=torch.device('cuda'),
                  ):
         super().__init__()
 
-        self.downstream_head1 = DPTHead(width, height) if self._is_dpt(ckpt) else LinearPts3d(width, height)
-        self.downstream_head2 = DPTHead(width, height) if self._is_dpt(ckpt) else LinearPts3d(width, height)
+        self.downstream_head1 = DPTHead(width, height) if self._is_dpt(ckpt_dict) else LinearPts3d(width, height)
+        self.downstream_head2 = DPTHead(width, height) if self._is_dpt(ckpt_dict) else LinearPts3d(width, height)
 
-        self._load_checkpoint(ckpt)
+        self._load_checkpoint(ckpt_dict)
         self.to(device)
 
 
@@ -148,13 +149,63 @@ class Dust3rHead(nn.Module):
 
         return pts3d1, conf1, pts3d2, conf2
 
-    def _load_checkpoint(self, ckpt):
+    def _load_checkpoint(self, ckpt_dict):
         head_state_dict = {
             k.replace(".dpt", ""): v
-            for k, v in ckpt['model'].items()
+            for k, v in ckpt_dict['model'].items()
             if "head" in k
         }
         self.load_state_dict(head_state_dict, strict=True)
 
-    def _is_dpt(self, ckpt):
-        return any("dpt" in k for k in ckpt['model'].keys())
+    def _is_dpt(self, ckpt_dict):
+        return any("dpt" in k for k in ckpt_dict['model'].keys())
+
+class Dust3r(nn.Module):
+    def __init__(self,
+                 model_path: str,
+                 width: int = 512,
+                 height: int = 512,
+                 device: torch.device = torch.device('cuda'),
+                 ):
+        super().__init__()
+
+        ckpt_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+
+        self.encoder = Dust3rEncoder(ckpt_dict, width=width, height=height, device=device, batch=2)
+        self.decoder = Dust3rDecoder(ckpt_dict, width=width, height=height, device=device)
+        self.head = Dust3rHead(ckpt_dict, width=width, height=height, device=device)
+        self.to(device)
+
+    @torch.inference_mode()
+    def forward(self, img1: torch.Tensor, img2: torch.Tensor):
+
+        input = torch.cat((img1, img2))
+        feat = self.encoder(input)
+        feat1, feat2 = feat.chunk(2, dim=0)
+
+        d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12 = self.decoder(feat1, feat2)
+        pt1, cf1, pt2, cf2 = self.head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
+
+        return pt1, cf1, pt2, cf2
+
+class Dust3rAllToOne(Dust3r):
+    def __init__(self,
+                 model_path: str,
+                 origin_img: torch.Tensor,
+                 device: torch.device = torch.device('cuda'),
+                 ):
+        super().__init__(model_path, origin_img.shape[-1], origin_img.shape[-2], device)
+        self.origin_feat = self.encoder(origin_img)
+
+    def update_origin(self, origin_img):
+        self.origin_feat = self.encoder(origin_img)
+
+    @torch.inference_mode()
+    def forward(self, img: torch.Tensor):
+
+        current_feat = self.encoder(img)
+
+        d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12 = self.decoder(self.origin_feat, current_feat)
+        pt1, cf1, pt2, cf2 = self.head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
+
+        return pt1, cf1, pt2, cf2
