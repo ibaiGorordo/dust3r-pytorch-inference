@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -10,6 +11,7 @@ from .blocks import Block, DecoderBlock, PatchEmbed
 from .rope2d import RoPE2D
 from .heads import DPTHead, LinearPts3d
 from .preprocess import preprocess
+from .postprocess import postprocess, postprocess_with_color
 
 
 class Dust3rEncoder(nn.Module):
@@ -169,17 +171,22 @@ class Dust3r(nn.Module):
                  ):
         super().__init__()
 
-        ckpt_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        self.width = width
+        self.height = height
+        self.device = device
 
+        ckpt_dict = torch.load(model_path, map_location='cpu', weights_only=False)
         self.encoder = Dust3rEncoder(ckpt_dict, width=width, height=height, device=device, batch=2)
         self.decoder = Dust3rDecoder(ckpt_dict, width=width, height=height, device=device)
         self.head = Dust3rHead(ckpt_dict, width=width, height=height, device=device)
-        self.to(device)
 
     @torch.inference_mode()
-    def forward(self, img1: torch.Tensor, img2: torch.Tensor):
+    def forward(self, img1: np.ndarray, img2: np.ndarray):
 
-        input = torch.cat((img1, img2))
+        input1, frame1 = preprocess(img1, self.width, self.height, self.device)
+        input2, frame2 = preprocess(img1, self.width, self.height, self.device)
+
+        input = torch.cat((input1, input2), dim=0)
         feat = self.encoder(input)
         feat1, feat2 = feat.chunk(2, dim=0)
 
