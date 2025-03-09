@@ -10,7 +10,7 @@ import cv2
 
 def postprocess(points: torch.Tensor,
                 confidences: torch.Tensor,
-                threshold: int = 3) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                threshold: float = 3.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     # Convert tensors to numpy arrays
     points = points.cpu().detach().numpy().squeeze()
@@ -25,9 +25,10 @@ def postprocess(points: torch.Tensor,
     return points.reshape(-1, 3), confidences, depth_map, mask
 
 def postprocess_with_color(points: torch.Tensor,
-                            confidences: torch.Tensor,
-                            img: np.ndarray,
-                            threshold: int = 3) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                           confidences: torch.Tensor,
+                           img: np.ndarray,
+                           threshold: float = 3.0,
+                           ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     # Convert tensors to numpy arrays
     points, confidences, depth_map, mask = postprocess(points, confidences, threshold)
@@ -94,7 +95,8 @@ def estimate_camera_pose(pts3d: np.ndarray,
         pose[:3, 3] = T.flatten()
 
         # Invert to get world-to-camera transform
-        pose = np.linalg.inv(pose)
+        pose = np.linalg.inv(np.r_[np.c_[R, T], [(0, 0, 0, 1)]])  # cam to world
+        # pose = np.linalg.inv(pose)
 
     except:
         # Return identity matrix if PnP fails
