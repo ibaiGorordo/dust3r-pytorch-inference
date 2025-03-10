@@ -103,3 +103,18 @@ def estimate_camera_pose(pts3d: np.ndarray,
         pose = np.eye(4)
 
     return pose
+
+def get_transformed_depth(points3d: np.ndarray,
+                          mask: np.ndarray,
+                          transform: np.ndarray) -> np.ndarray:
+
+    # Transform points to world coordinates
+    points3d = np.c_[points3d, np.ones(points3d.shape[0])]
+    points3d = points3d @ np.linalg.inv(transform).T
+    points3d = points3d[:, :3] / points3d[:, 3:]
+
+    # Fill the depth map with transformed points
+    depth_map = np.zeros_like(mask, dtype=np.float32)
+    depth_map[mask] = points3d[:, 2]
+
+    return depth_map

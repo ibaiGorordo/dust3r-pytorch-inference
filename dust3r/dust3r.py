@@ -12,7 +12,7 @@ from .blocks import Block, DecoderBlock, PatchEmbed
 from .rope2d import RoPE2D
 from .heads import DPTHead, LinearPts3d
 from .preprocess import preprocess
-from .postprocess import postprocess_with_color, estimate_intrinsics, estimate_camera_pose
+from .postprocess import postprocess_with_color, estimate_intrinsics, estimate_camera_pose, get_transformed_depth
 
 
 @dataclass
@@ -227,11 +227,13 @@ class Dust3r(nn.Module):
 
         # Estimate intrinsics
         intrinsics1 = estimate_intrinsics(pts1, mask1)
-        intrinsics2 = estimate_intrinsics(pts2, mask2)
+        intrinsics2 = intrinsics1 # estimate_intrinsics(pts2, mask2)
 
         # Estimate camera pose (the first one is the origin)
         cam_pose1 = np.eye(4)
-        cam_pose2 = estimate_camera_pose(pts2, intrinsics2, mask2)
+        cam_pose2 = estimate_camera_pose(pts2, intrinsics1, mask2)
+
+        depth_map2 = get_transformed_depth(pts2, mask2, cam_pose2)
 
         output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1)
         output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2)
