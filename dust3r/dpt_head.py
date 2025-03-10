@@ -8,13 +8,10 @@
 # https://github.com/isl-org/DPT
 # https://github.com/EPFL-VILAB/MultiMAE/blob/main/multimae/output_adapters.py
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from typing import Union, Tuple, Iterable, List, Optional
-
-from .postprocess import postprocess
+from typing import Union, Tuple
 
 
 def pair(t):
@@ -421,8 +418,5 @@ class DPTHead(nn.Module):
 
         # Output head
         out = self.head(path_1)
-
-        # Postprocess
-        out = postprocess(out)
 
         return out
