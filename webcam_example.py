@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     # Initialize Dust3r model
     model_path = "models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
-    encoder = Dust3rAllToOne(model_path, input, device=device)
+    model = Dust3rAllToOne(model_path, input, device=device)
 
 
     num_frames = 100
@@ -33,8 +33,7 @@ if __name__ == '__main__':
         if not ret:
             break
 
-        input, frame = preprocess(frame, width, height, device)
-        pts1, conf1, pts2, conf2 = encoder(input)
+        pts1, conf1, pts2, conf2 = model(frame)
         pts1, colors1, pts2, colors2 = postprocess_with_color(pts1, conf1, original_frame, pts2, conf2, frame)
 
         rr.log(f"pcd/{i}", rr.Points3D(pts2, colors=colors1), static=True)

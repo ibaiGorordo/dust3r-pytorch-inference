@@ -14,7 +14,6 @@
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/patch_embed.py
 
 
-import torch
 import torch.nn as nn
 
 
@@ -141,71 +140,6 @@ class CrossAttention(nn.Module):
         x = self.proj_drop(x)
         return x
 
-class Block(nn.Module):
-
-    def __init__(self, dim, num_heads, rope, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, rope=rope, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop,
-                              proj_drop=drop)
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-    def forward(self, x):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
 
 
 
-
-class DecoderBlock(nn.Module):
-
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, norm_mem=True, rope=None):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, rope=rope, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop,
-                              proj_drop=drop)
-        self.cross_attn = CrossAttention(dim, rope=rope, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop,
-                                         proj_drop=drop)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        self.norm3 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.norm_y = norm_layer(dim) if norm_mem else nn.Identity()
-
-    def forward(self, x, y):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
-        y_ = self.norm_y(y)
-        x = x + self.drop_path(self.cross_attn(self.norm2(x), y_, y_))
-        x = x + self.drop_path(self.mlp(self.norm3(x)))
-        return x, y
-
-
-class PatchEmbed(nn.Module):
-    """ just adding _init_weights + position getter compared to timm.models.layers.patch_embed.PatchEmbed"""
-
-    def __init__(self, img_size=(512, 512), patch_size=(16, 16), in_chans=3, embed_dim=768, norm_layer=None):
-        super().__init__()
-        self.img_size = img_size
-        self.patch_size = patch_size
-
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
-
-    def forward(self, x):
-        _, C, H, W = x.shape
-        x = self.proj(x)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        x = self.norm(x)
-        return x
-
-    def _init_weights(self):
-        w = self.proj.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
