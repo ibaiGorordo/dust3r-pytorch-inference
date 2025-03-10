@@ -13,8 +13,8 @@ model_path = "models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
 dust3r = Dust3r(model_path, width, height, conf_threshold, device)
 
 # Read input images
-frame1 = cv2.imread("data/test4.jpg")
-frame2 = cv2.imread("data/test3.jpg")
+frame1 = cv2.imread("data/test1.jpg")
+frame2 = cv2.imread("data/test2.jpg")
 
 # Run Dust3r model
 pts1, colors1, depth_map1, mask1, pts2, colors2, mask2 = dust3r(frame1, frame2)
@@ -22,7 +22,7 @@ pts1, colors1, depth_map1, mask1, pts2, colors2, mask2 = dust3r(frame1, frame2)
 # Estimate intrinsics
 intrinsics1 = estimate_intrinsics(pts1, mask1)
 intrinsics2 = estimate_intrinsics(pts2, mask2)
-print(intrinsics1)
+print(intrinsics2)
 
 # Estimate camera pose (the first one is the origin)
 cam_pose = estimate_camera_pose(pts2, intrinsics2, mask2)
