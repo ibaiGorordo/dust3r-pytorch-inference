@@ -167,6 +167,7 @@ class Dust3r(nn.Module):
                  model_path: str,
                  width: int = 512,
                  height: int = 512,
+                 conf_threshold: float = 3.0,
                  device: torch.device = torch.device('cuda'),
                  ):
         super().__init__()
@@ -174,6 +175,7 @@ class Dust3r(nn.Module):
         self.width = width
         self.height = height
         self.device = device
+        self.conf_threshold = conf_threshold
 
         ckpt_dict = torch.load(model_path, map_location='cpu', weights_only=False)
         self.encoder = Dust3rEncoder(ckpt_dict, width=width, height=height, device=device, batch=2)
@@ -193,7 +195,10 @@ class Dust3r(nn.Module):
         d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12 = self.decoder(feat1, feat2)
         pt1, cf1, pt2, cf2 = self.head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
 
-        return pt1, cf1, pt2, cf2
+        pts1, colors1, conf_map1, depth_map1, mask1 = postprocess_with_color(pt1, cf1, frame1, threshold=self.conf_threshold)
+        pts2, colors2, conf_map2, _, mask2 = postprocess_with_color(pt2, cf2, frame2, threshold=self.conf_threshold)
+
+        return pts1, colors1, depth_map1, mask1, pts2, colors2, mask2
 
 class Dust3rAllToOne(Dust3r):
     def __init__(self,
