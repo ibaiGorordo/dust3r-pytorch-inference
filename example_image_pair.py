@@ -2,8 +2,7 @@ import torch
 import cv2
 import rerun as rr
 
-from dust3r import Dust3r, preprocess, postprocess_with_color
-from dust3r.postprocess import estimate_intrinsics, estimate_camera_pose
+from dust3r import Dust3r
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -17,27 +16,18 @@ frame1 = cv2.imread("data/test1.jpg")
 frame2 = cv2.imread("data/test2.jpg")
 
 # Run Dust3r model
-pts1, colors1, depth_map1, mask1, pts2, colors2, mask2 = dust3r(frame1, frame2)
-
-# Estimate intrinsics
-intrinsics1 = estimate_intrinsics(pts1, mask1)
-intrinsics2 = estimate_intrinsics(pts2, mask2)
-print(intrinsics2)
-
-# Estimate camera pose (the first one is the origin)
-cam_pose = estimate_camera_pose(pts2, intrinsics2, mask2)
-print(cam_pose)
+output1, output2 = dust3r(frame1, frame2)
 
 # Visualize the output
 rr.init("Dust3r Visualizer", spawn=True)
-rr.log("pts3d1", rr.Points3D(pts1, colors=colors1))
-rr.log("pts3d2", rr.Points3D(pts2, colors=colors2))
+rr.log("pts3d1", rr.Points3D(output1.pts3d, colors=output1.colors))
+rr.log("pts3d2", rr.Points3D(output2.pts3d, colors=output2.colors))
 
-# rr.log("cam1/rgb", rr.Image(frame1))
-# rr.log("cam1/depth", rr.DepthImage(depth_map1))
-# rr.log("cam1", rr.Pinhole(image_from_camera=intrinsics1, width=width, height=height))
-#
-# rr.log("cam2/rgb", rr.Image(frame2))
-# rr.log("cam2/depth", rr.DepthImage(depth_map2))
-# rr.log("cam2", rr.Pinhole(image_from_camera=intrinsics2, width=width, height=height))
-# rr.log("cam2", rr.Transform3D(mat3x3=cam_pose[:3, :3], translation=cam_pose[:3, 3]))
+rr.log("cam1/rgb", rr.Image(output1.input))
+rr.log("cam1/depth", rr.DepthImage(output1.depth_map))
+rr.log("cam1", rr.Pinhole(image_from_camera=output1.intrinsic, width=width, height=height))
+
+rr.log("cam2/rgb", rr.Image(output2.input))
+rr.log("cam2/depth", rr.DepthImage(output2.depth_map))
+rr.log("cam2", rr.Pinhole(image_from_camera=output2.intrinsic, width=width, height=height))
+rr.log("cam2", rr.Transform3D(mat3x3=output2.pose[:3, :3], translation=output2.pose[:3, 3]))

@@ -1,18 +1,29 @@
 from copy import deepcopy
+from functools import partial
+from dataclasses import dataclass
 
 import numpy as np
 import torch
 import torch.nn as nn
 
 torch.backends.cuda.matmul.allow_tf32 = True # for gpu >= Ampere and pytorch >= 1.12
-from functools import partial
 
 from .blocks import Block, DecoderBlock, PatchEmbed
 from .rope2d import RoPE2D
 from .heads import DPTHead, LinearPts3d
 from .preprocess import preprocess
-from .postprocess import postprocess, postprocess_with_color
+from .postprocess import postprocess_with_color, estimate_intrinsics, estimate_camera_pose
 
+
+@dataclass
+class Output:
+    input: np.ndarray
+    pts3d: np.ndarray
+    colors: np.ndarray
+    conf_map: np.ndarray
+    depth_map: np.ndarray
+    intrinsic: np.ndarray
+    pose: np.ndarray
 
 class Dust3rEncoder(nn.Module):
     def __init__(self,
@@ -182,11 +193,14 @@ class Dust3r(nn.Module):
         self.decoder = Dust3rDecoder(ckpt_dict, width=width, height=height, device=device)
         self.head = Dust3rHead(ckpt_dict, width=width, height=height, device=device)
 
+    def __call__(self, img1: np.ndarray, img2: np.ndarray) -> tuple[Output, Output]:
+        return self.forward(img1, img2)
+
     @torch.inference_mode()
-    def forward(self, img1: np.ndarray, img2: np.ndarray):
+    def forward(self, img1: np.ndarray, img2: np.ndarray) -> tuple[Output, Output]:
 
         input1, frame1 = preprocess(img1, self.width, self.height, self.device)
-        input2, frame2 = preprocess(img1, self.width, self.height, self.device)
+        input2, frame2 = preprocess(img2, self.width, self.height, self.device)
 
         input = torch.cat((input1, input2), dim=0)
         feat = self.encoder(input)
@@ -195,10 +209,35 @@ class Dust3r(nn.Module):
         d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12 = self.decoder(feat1, feat2)
         pt1, cf1, pt2, cf2 = self.head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
 
-        pts1, colors1, conf_map1, depth_map1, mask1 = postprocess_with_color(pt1, cf1, frame1, threshold=self.conf_threshold)
-        pts2, colors2, conf_map2, _, mask2 = postprocess_with_color(pt2, cf2, frame2, threshold=self.conf_threshold)
+        output1, output2 = self.postprocess(frame1, pt1, cf1, frame2, pt2, cf2)
 
-        return pts1, colors1, depth_map1, mask1, pts2, colors2, mask2
+        return output1, output2
+
+    def postprocess(self,
+                    frame1: np.ndarray,
+                    pt1: torch.Tensor,
+                    cf1: torch.Tensor,
+                    frame2: np.ndarray,
+                    pt2: torch.Tensor,
+                    cf2: torch.Tensor,
+                    ) -> tuple[Output, Output]:
+
+        pts1, colors1, conf_map1, depth_map1, mask1 = postprocess_with_color(pt1, cf1, frame1, threshold=self.conf_threshold)
+        pts2, colors2, conf_map2, depth_map2, mask2 = postprocess_with_color(pt2, cf2, frame2, threshold=self.conf_threshold)
+
+        # Estimate intrinsics
+        intrinsics1 = estimate_intrinsics(pts1, mask1)
+        intrinsics2 = estimate_intrinsics(pts2, mask2)
+
+        # Estimate camera pose (the first one is the origin)
+        cam_pose1 = np.eye(4)
+        cam_pose2 = estimate_camera_pose(pts2, intrinsics2, mask2)
+
+        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1)
+        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2)
+
+        return output1, output2
+
 
 class Dust3rAllToOne(Dust3r):
     def __init__(self,
