@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .dpt_head import DPTHead
+from .third_party import DPTHead
 
 def postprocess(out):
     """

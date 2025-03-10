@@ -3,7 +3,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 
-from .rope2d import RoPE2D
+from .third_party import RoPE2D
 from .common import DropPath, Mlp, Attention
 
 

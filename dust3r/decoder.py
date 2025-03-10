@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from .common import DropPath, Mlp, Attention, CrossAttention
-from .rope2d import RoPE2D
+from .third_party import RoPE2D
 
 
 class DecoderBlock(nn.Module):
