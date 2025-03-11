@@ -20,6 +20,8 @@ class Output:
     depth_map: np.ndarray
     intrinsic: np.ndarray
     pose: np.ndarray
+    width: int
+    height: int
 
 
 class Dust3r(nn.Module):
@@ -94,8 +96,8 @@ class Dust3r(nn.Module):
 
         depth_map2 = get_transformed_depth(pts2, mask2, cam_pose2)
 
-        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1)
-        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2)
+        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, self.width, self.height)
+        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, self.width, self.height)
 
         return output1, output2
 
@@ -127,22 +129,22 @@ class Dust3r(nn.Module):
         cam_pose1 = np.eye(4)
         cam_pose2 = np.eye(4)
         if conf1 > conf2:
-            # ptcloud is expressed in camera1
+            # Use camera 1 as the origin
             cam_pose2 = estimate_camera_pose(pts2_1, intrinsics2, mask2_1)
             depth_map2 = get_transformed_depth(pts2_1, mask2_1, cam_pose2)
             conf_map2 = conf_map2_1
             colors2 = colors2_1
             pts2 = pts2_1
         else:
-            # ptcloud is expressed in camera2
+            # Use camera 2 as the origin
             cam_pose1 = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
             depth_map1 = get_transformed_depth(pts1_2, mask1_2, cam_pose1)
             conf_map1 = conf_map1_2
             colors1 = colors1_2
             pts1 = pts1_2
 
-        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1)
-        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2)
+        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, self.width, self.height)
+        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, self.width, self.height)
 
         return output1, output2
 
