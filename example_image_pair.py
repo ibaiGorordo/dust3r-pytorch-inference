@@ -26,6 +26,7 @@ rr.log("pts3d2", rr.Points3D(output2.pts3d, colors=output2.colors))
 rr.log("cam1/rgb", rr.Image(output1.input))
 rr.log("cam1/depth", rr.DepthImage(output1.depth_map))
 rr.log("cam1", rr.Pinhole(image_from_camera=output1.intrinsic, width=width, height=height))
+rr.log("cam1", rr.Transform3D(mat3x3=output1.pose[:3, :3], translation=output1.pose[:3, 3]))
 
 rr.log("cam2/rgb", rr.Image(output2.input))
 rr.log("cam2/depth", rr.DepthImage(output2.depth_map))
