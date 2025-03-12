@@ -13,8 +13,23 @@
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/mlp.py
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/patch_embed.py
 
+from dataclasses import dataclass
 
+import numpy as np
 import torch.nn as nn
+
+
+@dataclass
+class Output:
+    input: np.ndarray
+    pts3d: np.ndarray
+    colors: np.ndarray
+    conf_map: np.ndarray
+    depth_map: np.ndarray
+    intrinsic: np.ndarray
+    pose: np.ndarray
+    width: int
+    height: int
 
 
 def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):

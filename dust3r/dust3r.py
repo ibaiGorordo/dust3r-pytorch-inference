@@ -1,27 +1,13 @@
-from dataclasses import dataclass
-
 import numpy as np
 import torch
 import torch.nn as nn
 
+from .common import Output
 from .encoder import Dust3rEncoder
 from .decoder import Dust3rDecoder
 from .head import Dust3rHead
 from .preprocess import preprocess
-from .postprocess import postprocess_with_color, estimate_intrinsics, estimate_camera_pose, get_transformed_depth
-
-
-@dataclass
-class Output:
-    input: np.ndarray
-    pts3d: np.ndarray
-    colors: np.ndarray
-    conf_map: np.ndarray
-    depth_map: np.ndarray
-    intrinsic: np.ndarray
-    pose: np.ndarray
-    width: int
-    height: int
+from .postprocess import postprocess_symmetric, postprocess
 
 
 class Dust3r(nn.Module):
@@ -63,9 +49,9 @@ class Dust3r(nn.Module):
         if self.symmetric:
             pt2_2, cf2_2, pt1_2, cf1_2 = self.decoder_head(feat2, feat1)
 
-            output1, output2 = self.postprocess_symmetric(frame1, pt1_1, cf1_1, pt1_2, cf1_2, frame2, pt2_1, cf2_1, pt2_2, cf2_2)
+            output1, output2 = postprocess_symmetric(frame1, pt1_1, cf1_1, pt1_2, cf1_2, frame2, pt2_1, cf2_1, pt2_2, cf2_2)
         else:
-            output1, output2 = self.postprocess(frame1, pt1_1, cf1_1, frame2, pt2_1, cf2_1)
+            output1, output2 = postprocess(frame1, pt1_1, cf1_1, frame2, pt2_1, cf2_1)
 
         return output1, output2
 
@@ -74,79 +60,7 @@ class Dust3r(nn.Module):
         pt1, cf1, pt2, cf2 = self.head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
         return pt1, cf1, pt2, cf2
 
-    def postprocess(self,
-                    frame1: np.ndarray,
-                    pt1: torch.Tensor,
-                    cf1: torch.Tensor,
-                    frame2: np.ndarray,
-                    pt2: torch.Tensor,
-                    cf2: torch.Tensor,
-                    ) -> tuple[Output, Output]:
 
-        pts1, colors1, conf_map1, depth_map1, mask1 = postprocess_with_color(pt1, cf1, frame1, threshold=self.conf_threshold)
-        pts2, colors2, conf_map2, depth_map2, mask2 = postprocess_with_color(pt2, cf2, frame2, threshold=self.conf_threshold)
-
-        # Estimate intrinsics
-        intrinsics1 = estimate_intrinsics(pts1, mask1)
-        intrinsics2 = intrinsics1 # estimate_intrinsics(pts2, mask2)
-
-        # Estimate camera pose (the first one is the origin)
-        cam_pose1 = np.eye(4)
-        cam_pose2 = estimate_camera_pose(pts2, intrinsics1, mask2)
-
-        depth_map2 = get_transformed_depth(pts2, mask2, cam_pose2)
-
-        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, self.width, self.height)
-        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, self.width, self.height)
-
-        return output1, output2
-
-    def postprocess_symmetric(self,
-                              frame1: np.ndarray,
-                              pt1_1: torch.Tensor,
-                              cf1_1: torch.Tensor,
-                              pt1_2: torch.Tensor,
-                              cf1_2: torch.Tensor,
-                              frame2: np.ndarray,
-                              pt2_1: torch.Tensor,
-                              cf2_1: torch.Tensor,
-                              pt2_2: torch.Tensor,
-                              cf2_2: torch.Tensor,
-                              ) -> tuple[Output, Output]:
-
-        pts1, colors1, conf_map1, depth_map1, mask1_1 = postprocess_with_color(pt1_1, cf1_1, frame1, threshold=self.conf_threshold)
-        pts1_2, colors1_2, conf_map1_2, depth_map1_2, mask1_2 = postprocess_with_color(pt1_2, cf1_2, frame1, threshold=self.conf_threshold)
-        pts2_1, colors2_1, conf_map2_1, depth_map2_1, mask2_1 = postprocess_with_color(pt2_1, cf2_1, frame2, threshold=self.conf_threshold)
-        pts2, colors2, conf_map2, depth_map2, mask2_2 = postprocess_with_color(pt2_2, cf2_2, frame2, threshold=self.conf_threshold)
-
-        # Estimate intrinsics
-        intrinsics1 = estimate_intrinsics(pts1, mask1_1)
-        intrinsics2 = estimate_intrinsics(pts2, mask2_2)
-
-        conf1 = conf_map1.mean() * conf_map1_2.mean()
-        conf2 = conf_map2_1.mean() * conf_map2.mean()
-
-        cam_pose1 = np.eye(4)
-        cam_pose2 = np.eye(4)
-        if conf1 > conf2:
-            # Use camera 1 as the origin
-            cam_pose2 = estimate_camera_pose(pts2_1, intrinsics2, mask2_1)
-            depth_map2 = get_transformed_depth(pts2_1, mask2_1, cam_pose2)
-            conf_map2 = conf_map2_1
-            colors2 = colors2_1
-            pts2 = pts2_1
-        else:
-            # Use camera 2 as the origin
-            cam_pose1 = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
-            depth_map1 = get_transformed_depth(pts1_2, mask1_2, cam_pose1)
-            conf_map1 = conf_map1_2
-            colors1 = colors1_2
-            pts1 = pts1_2
-
-        output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, self.width, self.height)
-        output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, self.width, self.height)
-
-        return output1, output2
 
 
 # class Dust3rAllToOne(Dust3r):

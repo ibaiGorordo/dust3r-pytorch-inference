@@ -8,7 +8,10 @@ import torch
 import numpy as np
 import cv2
 
-def postprocess(points: torch.Tensor,
+from .common import Output
+
+
+def parse_output(points: torch.Tensor,
                 confidences: torch.Tensor,
                 threshold: float = 3.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
@@ -24,14 +27,14 @@ def postprocess(points: torch.Tensor,
 
     return points.reshape(-1, 3), confidences, depth_map, mask
 
-def postprocess_with_color(points: torch.Tensor,
+def parse_output_with_color(points: torch.Tensor,
                            confidences: torch.Tensor,
                            img: np.ndarray,
                            threshold: float = 3.0,
                            ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     # Convert tensors to numpy arrays
-    points, confidences, depth_map, mask = postprocess(points, confidences, threshold)
+    points, confidences, depth_map, mask = parse_output(points, confidences, threshold)
     colors = img[mask, :].reshape(-1, 3)
 
     return points, colors, confidences, depth_map, mask
@@ -118,3 +121,81 @@ def get_transformed_depth(points3d: np.ndarray,
     depth_map[mask] = points3d[:, 2]
 
     return depth_map
+
+def postprocess(frame1: np.ndarray,
+                 pt1: torch.Tensor,
+                 cf1: torch.Tensor,
+                 frame2: np.ndarray,
+                 pt2: torch.Tensor,
+                 cf2: torch.Tensor,
+                 conf_threshold: float = 3.0,
+                 width: int = 512,
+                 height: int = 512,
+                 ) -> tuple[Output, Output]:
+
+    pts1, colors1, conf_map1, depth_map1, mask1 = parse_output_with_color(pt1, cf1, frame1, threshold=conf_threshold)
+    pts2, colors2, conf_map2, depth_map2, mask2 = parse_output_with_color(pt2, cf2, frame2, threshold=conf_threshold)
+
+    # Estimate intrinsics
+    intrinsics1 = estimate_intrinsics(pts1, mask1)
+    intrinsics2 = intrinsics1 # estimate_intrinsics(pts2, mask2)
+
+    # Estimate camera pose (the first one is the origin)
+    cam_pose1 = np.eye(4)
+    cam_pose2 = estimate_camera_pose(pts2, intrinsics1, mask2)
+
+    depth_map2 = get_transformed_depth(pts2, mask2, cam_pose2)
+
+    output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, width, height)
+    output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, width, height)
+
+    return output1, output2
+
+def postprocess_symmetric(frame1: np.ndarray,
+                          pt1_1: torch.Tensor,
+                          cf1_1: torch.Tensor,
+                          pt1_2: torch.Tensor,
+                          cf1_2: torch.Tensor,
+                          frame2: np.ndarray,
+                          pt2_1: torch.Tensor,
+                          cf2_1: torch.Tensor,
+                          pt2_2: torch.Tensor,
+                          cf2_2: torch.Tensor,
+                          conf_threshold: float = 3.0,
+                          width: int = 512,
+                          height: int = 512,
+                          ) -> tuple[Output, Output]:
+
+    pts1, colors1, conf_map1, depth_map1, mask1_1 = parse_output_with_color(pt1_1, cf1_1, frame1, threshold=conf_threshold)
+    pts1_2, colors1_2, conf_map1_2, depth_map1_2, mask1_2 = parse_output_with_color(pt1_2, cf1_2, frame1, threshold=conf_threshold)
+    pts2_1, colors2_1, conf_map2_1, depth_map2_1, mask2_1 = parse_output_with_color(pt2_1, cf2_1, frame2, threshold=conf_threshold)
+    pts2, colors2, conf_map2, depth_map2, mask2_2 = parse_output_with_color(pt2_2, cf2_2, frame2, threshold=conf_threshold)
+
+    # Estimate intrinsics
+    intrinsics1 = estimate_intrinsics(pts1, mask1_1)
+    intrinsics2 = estimate_intrinsics(pts2, mask2_2)
+
+    conf1 = conf_map1.mean() * conf_map1_2.mean()
+    conf2 = conf_map2_1.mean() * conf_map2.mean()
+
+    cam_pose1 = np.eye(4)
+    cam_pose2 = np.eye(4)
+    if conf1 > conf2:
+        # Use camera 1 as the origin
+        cam_pose2 = estimate_camera_pose(pts2_1, intrinsics2, mask2_1)
+        depth_map2 = get_transformed_depth(pts2_1, mask2_1, cam_pose2)
+        conf_map2 = conf_map2_1
+        colors2 = colors2_1
+        pts2 = pts2_1
+    else:
+        # Use camera 2 as the origin
+        cam_pose1 = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
+        depth_map1 = get_transformed_depth(pts1_2, mask1_2, cam_pose1)
+        conf_map1 = conf_map1_2
+        colors1 = colors1_2
+        pts1 = pts1_2
+
+    output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, width, height)
+    output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, width, height)
+
+    return output1, output2

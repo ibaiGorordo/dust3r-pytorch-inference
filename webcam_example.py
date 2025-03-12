@@ -2,7 +2,7 @@ import torch
 
 from dust3r.dust3r import Dust3rAllToOne
 from dust3r.preprocess import preprocess
-from dust3r.postprocess import postprocess, postprocess_with_color
+from dust3r.postprocess import parse_output, postprocess_with_color
 
 if __name__ == '__main__':
 

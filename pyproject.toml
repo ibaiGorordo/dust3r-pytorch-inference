@@ -12,6 +12,7 @@ dependencies = [
     "onnxruntime",
     "einops",
     "Pillow",
+    "scipy",
     "rerun-sdk",
     "opencv-python",
 ]
