@@ -15,6 +15,7 @@ class Dust3r(nn.Module):
                  model_path: str,
                  width: int = 512,
                  height: int = 512,
+                 encoder_batch_size: int = 2,
                  symmetric: bool = False,
                  device: torch.device = torch.device('cuda'),
                  conf_threshold: float = 3.0,
@@ -28,7 +29,7 @@ class Dust3r(nn.Module):
         self.conf_threshold = conf_threshold
 
         ckpt_dict = torch.load(model_path, map_location='cpu', weights_only=False)
-        self.encoder = Dust3rEncoder(ckpt_dict, width=width, height=height, device=device, batch=2)
+        self.encoder = Dust3rEncoder(ckpt_dict, width=width, height=height, device=device, batch=encoder_batch_size)
         self.decoder = Dust3rDecoder(ckpt_dict, width=width, height=height, device=device)
         self.head = Dust3rHead(ckpt_dict, width=width, height=height, device=device)
 
@@ -61,30 +62,35 @@ class Dust3r(nn.Module):
         return pt1, cf1, pt2, cf2
 
 
+class Dust3rAllToOne(Dust3r):
+    def __init__(self,
+                 model_path: str,
+                 origin_img: np.ndarray,
+                 width: int = 512,
+                 height: int = 512,
+                 device: torch.device = torch.device('cuda'),
+                 conf_threshold: float = 3.0,
+                 ):
+        super().__init__(model_path, width, height,1, False, device, conf_threshold)
 
+        input, self.original_frame = preprocess(origin_img, self.width, self.height, self.device)
+        self.origin_feat = self.encoder(input)
 
-# class Dust3rAllToOne(Dust3r):
-#     def __init__(self,
-#                  model_path: str,
-#                  origin_img: torch.Tensor,
-#                  device: torch.device = torch.device('cuda'),
-#                  ):
-#         super().__init__(model_path, origin_img.shape[-1], origin_img.shape[-2], device)
-#         self.origin_feat = self.encoder(origin_img)
-#
-#     def __call__(self, img: np.ndarray) -> tuple[Output, Output]:
-#         return self.forward_single(img)
-#
-#     def update_origin(self, origin_img):
-#         self.origin_feat = self.encoder(origin_img)
-#
-#     @torch.inference_mode()
-#     def forward_single(self, img: np.ndarray):
-#         input, frame = preprocess(img, self.width, self.height, self.device)
-#
-#         current_feat = self.encoder(input)
-#
-#         d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12 = self.decoder(self.origin_feat, current_feat)
-#         pt1, cf1, pt2, cf2 = self.head(d1_0, d1_6, d1_9, d1_12, d2_0, d2_6, d2_9, d2_12)
-#
-#         return pt1, cf1, pt2, cf2
+    def __call__(self, img: np.ndarray, foo: np.ndarray=None) -> tuple[Output, Output]:
+        return self.forward_single(img)
+
+    def update_origin(self, origin_img):
+        self.origin_feat = self.encoder(origin_img)
+
+    @torch.inference_mode()
+    def forward_single(self, img: np.ndarray):
+        input, frame = preprocess(img, self.width, self.height, self.device)
+
+        feat = self.encoder(input)
+
+        pt1_1, cf1_1, pt2_1, cf2_1 = self.decoder_head(self.origin_feat, feat)
+        output1, output2 = postprocess(self.original_frame, pt1_1, cf1_1, frame, pt2_1, cf2_1)
+
+        return output1, output2
+
+# class Dust3rGlobalAlignment(Dust3r):
