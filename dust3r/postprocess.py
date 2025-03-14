@@ -107,14 +107,22 @@ def estimate_camera_pose(pts3d: np.ndarray,
 
     return pose
 
+def get_transformed_points(points3d: np.ndarray,
+                            transform: np.ndarray) -> np.ndarray:
+
+     # Transform points to world coordinates
+     points3d = np.c_[points3d, np.ones(points3d.shape[0])]
+     points3d = points3d @ np.linalg.inv(transform).T
+     points3d = points3d[:, :3] / points3d[:, 3:]
+
+     return points3d
+
 def get_transformed_depth(points3d: np.ndarray,
                           mask: np.ndarray,
                           transform: np.ndarray) -> np.ndarray:
 
     # Transform points to world coordinates
-    points3d = np.c_[points3d, np.ones(points3d.shape[0])]
-    points3d = points3d @ np.linalg.inv(transform).T
-    points3d = points3d[:, :3] / points3d[:, 3:]
+    points3d = get_transformed_points(points3d, transform)
 
     # Fill the depth map with transformed points
     depth_map = np.zeros_like(mask, dtype=np.float32)
@@ -178,22 +186,24 @@ def postprocess_symmetric(frame1: np.ndarray,
     conf1 = conf_map1.mean() * conf_map1_2.mean()
     conf2 = conf_map2_1.mean() * conf_map2.mean()
 
+    # Always use the first frame as the origin
     cam_pose1 = np.eye(4)
-    cam_pose2 = np.eye(4)
     if conf1 > conf2:
-        # Use camera 1 as the origin
+        # Use i,j info
         cam_pose2 = estimate_camera_pose(pts2_1, intrinsics2, mask2_1)
         depth_map2 = get_transformed_depth(pts2_1, mask2_1, cam_pose2)
         conf_map2 = conf_map2_1
         colors2 = colors2_1
         pts2 = pts2_1
     else:
-        # Use camera 2 as the origin
-        cam_pose1 = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
-        depth_map1 = get_transformed_depth(pts1_2, mask1_2, cam_pose1)
-        conf_map1 = conf_map1_2
-        colors1 = colors1_2
-        pts1 = pts1_2
+        # Use j,i info
+        cam_pose_rev = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
+        cam_pose2 = np.linalg.inv(cam_pose_rev)
+
+        pts1 = get_transformed_points(pts1_2, cam_pose_rev)
+        depth_map1 = get_transformed_depth(pts1, mask1_2, cam_pose1)
+        pts2 = get_transformed_points(pts2, cam_pose_rev)
+        depth_map2 = get_transformed_depth(pts2, mask2_2, cam_pose2)
 
     output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, width, height)
     output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, width, height)
