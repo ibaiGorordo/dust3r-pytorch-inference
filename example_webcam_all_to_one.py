@@ -20,8 +20,8 @@ if __name__ == '__main__':
     model_path = "models/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
     model = Dust3rAllToOne(model_path, original_frame, width, height, device=device, conf_threshold=conf_threshold)
 
-    num_frames = 100
-    wait_time = 0.1 # second between frames
+    num_frames = 20
+    wait_time = 0.5 # second between frames
     init_visualizer()
     for i in range(1, num_frames):
 
@@ -34,7 +34,6 @@ if __name__ == '__main__':
         if i == 0:
             rr.log(f"/output0/pts3d", rr.Points3D(output1.pts3d, colors=output1.colors), static=True)
         rr.log(f"/output{i}/pts3d", rr.Points3D(output2.pts3d, colors=output2.colors), static=True)
-        print(i)
 
         # Wait for a while
         cv2.waitKey(int(wait_time * 1000))

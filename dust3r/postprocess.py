@@ -46,6 +46,8 @@ def estimate_intrinsics(pts3d: np.ndarray,
     width, height = mask.shape[::-1]
     pixels = np.mgrid[-width//2:width//2, -height//2:height//2].T.astype(np.float32)
     pixels = pixels[mask, :].reshape(-1, 2)
+    if len(pixels) == 0:
+        return np.zeros((3, 3), dtype=np.float32)
 
     # Compute normalized image plane coordinates (x/z, y/z)
     xy_over_z = np.divide(pts3d[:, :2], pts3d[:, 2:3], where=pts3d[:, 2:3] != 0)
@@ -197,13 +199,14 @@ def postprocess_symmetric(frame1: np.ndarray,
         pts2 = pts2_1
     else:
         # Use j,i info
-        cam_pose_rev = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
-        cam_pose2 = np.linalg.inv(cam_pose_rev)
+        cam_pose1_to_2 = estimate_camera_pose(pts1_2, intrinsics1, mask1_2)
+        cam_pose2 = np.linalg.inv(cam_pose1_to_2)
 
-        pts1 = get_transformed_points(pts1_2, cam_pose_rev)
-        depth_map1 = get_transformed_depth(pts1, mask1_2, cam_pose1)
-        pts2 = get_transformed_points(pts2, cam_pose_rev)
-        depth_map2 = get_transformed_depth(pts2, mask2_2, cam_pose2)
+        pts1 = get_transformed_points(pts1_2, cam_pose1_to_2)
+        pts2 = get_transformed_points(pts2, cam_pose1_to_2)
+        colors1 = colors1_2
+        conf_map1 = conf_map1_2
+        depth_map1 = get_transformed_depth(pts1_2, mask1_2, cam_pose1_to_2)
 
     output1 = Output(frame1, pts1, colors1, conf_map1, depth_map1, intrinsics1, cam_pose1, width, height)
     output2 = Output(frame2, pts2, colors2, conf_map2, depth_map2, intrinsics2, cam_pose2, width, height)
