@@ -2,7 +2,7 @@ import torch
 import cv2
 import rerun as rr
 
-from dust3r.dust3r import Dust3rAllToOne
+from dust3r import Dust3rAllToOne
 from dust3r.visualization import init_visualizer
 
 if __name__ == '__main__':

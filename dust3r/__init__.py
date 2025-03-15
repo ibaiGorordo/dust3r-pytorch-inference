@@ -1,4 +1,4 @@
-from .dust3r import Dust3r, Output
+from .dust3r import Output, Dust3r, Dust3rAllToOne
 from .encoder import Dust3rEncoder
 from .decoder import Dust3rDecoder
 from .head import Dust3rHead
