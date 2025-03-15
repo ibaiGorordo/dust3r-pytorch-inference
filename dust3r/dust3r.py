@@ -50,7 +50,8 @@ class Dust3r(nn.Module):
         if self.symmetric:
             pt2_2, cf2_2, pt1_2, cf1_2 = self.decoder_head(feat2, feat1)
 
-            output1, output2 = postprocess_symmetric(frame1, pt1_1, cf1_1, pt1_2, cf1_2, frame2, pt2_1, cf2_1, pt2_2, cf2_2)
+            output1, output2 = postprocess_symmetric(frame1, pt1_1, cf1_1, pt1_2, cf1_2,
+                                                     frame2, pt2_1, cf2_1, pt2_2, cf2_2)
         else:
             output1, output2 = postprocess(frame1, pt1_1, cf1_1, frame2, pt2_1, cf2_1)
 
@@ -78,9 +79,6 @@ class Dust3rAllToOne(Dust3r):
 
     def __call__(self, img: np.ndarray, foo: np.ndarray=None) -> tuple[Output, Output]:
         return self.forward_single(img)
-
-    def update_origin(self, origin_img):
-        self.origin_feat = self.encoder(origin_img)
 
     @torch.inference_mode()
     def forward_single(self, img: np.ndarray):
